@@ -1,0 +1,5 @@
+{
+  "name": "AquaMind Irrigation Controller",
+  "description": "A smart, AI-backed irrigation controller that monitors hyper-local weather conditions to create an optimized watering schedule, conserving water while keeping your lawn healthy.",
+  "requestFramePermissions": []
+}
