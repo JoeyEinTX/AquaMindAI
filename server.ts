@@ -2,9 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import { readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { createServer } from 'http';
+import { wsService } from './websocket.js';
 
 const app = express();
 const PORT = 3001;
+const httpServer = createServer(app);
 
 // Middleware
 app.use(cors());
@@ -351,6 +354,9 @@ class RunLogger {
     const sourceLabel = entry.source === 'manual' ? 'manual' : 'schedule';
     const statusLabel = entry.success ? '✓' : '✗';
     console.log(`[LOG] ${statusLabel} Zone ${entry.zoneId} ran for ${entry.durationSec} seconds (${sourceLabel})`);
+    
+    // Emit WebSocket event
+    wsService.emitLogUpdated(logEntry);
   }
 
   getLogs(limit?: number): RunLogEntry[] {
@@ -413,6 +419,13 @@ class ZoneManager {
     this.state.rainDelay.expiresAt = expiresAt;
     this.state.rainDelay.hoursRemaining = hours || 0;
     this.saveState();
+    
+    // Emit WebSocket event
+    wsService.emitRainDelayChanged({
+      isActive,
+      expiresAt,
+      hoursRemaining: hours || 0
+    });
   }
 
   async startZone(zoneId: number, durationSeconds: number = 600, source: 'manual' | 'schedule' = 'manual'): Promise<{ success: boolean; message: string }> {
@@ -447,6 +460,15 @@ class ZoneManager {
     this.state.activeZoneName = zone.name;
 
     this.saveState();
+    
+    // Emit WebSocket event
+    wsService.emitZoneStarted({
+      zoneId,
+      zoneName: zone.name,
+      durationSec: durationSeconds,
+      source
+    });
+    
     return { success: true, message: `Zone ${zoneId} started for ${durationSeconds} seconds` };
   }
 
@@ -495,6 +517,14 @@ class ZoneManager {
     this.state.activeZoneName = null;
 
     this.saveState();
+    
+    // Emit WebSocket event
+    wsService.emitZoneStopped({
+      zoneId,
+      zoneName: zone.name,
+      success
+    });
+    
     return { success: true, message: `Zone ${zoneId} stopped` };
   }
 
@@ -651,6 +681,16 @@ class Scheduler {
             // Update last run timestamp
             this.zoneManager.updateScheduleLastRun(schedule.id, now.toISOString());
             console.log(`[SCHEDULER] Successfully started zone ${schedule.zoneId} for ${schedule.durationSec} seconds`);
+            
+            // Emit WebSocket event for schedule trigger
+            const zone = this.zoneManager['state'].zones.find(z => z.id === schedule.zoneId);
+            wsService.emitScheduleTriggered({
+              scheduleId: schedule.id,
+              zoneId: schedule.zoneId,
+              zoneName: zone?.name || `Zone ${schedule.zoneId}`,
+              durationSec: schedule.durationSec,
+              startTime: schedule.startTime
+            });
           } else {
             console.log(`[SCHEDULER] Failed to start zone ${schedule.zoneId}: ${result.message}`);
           }
@@ -956,6 +996,9 @@ app.post('/test/schedules', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+// Initialize WebSocket service
+wsService.initialize(httpServer);
+
+httpServer.listen(PORT, () => {
   console.log(`AquaMind Backend server running on port ${PORT}`);
 });
