@@ -616,3 +616,169 @@ button, a, [role="button"] {
 .led-waiting {
   background: #fbbf24;
 }
+
+/* =========================
+   AI REACTIVE ANIMATIONS
+   ========================= */
+
+/* AI typing pulse */
+@keyframes ai-typing-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--mood-glow, rgba(139, 92, 246, 0.4));
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 8px var(--mood-glow, rgba(139, 92, 246, 0.1));
+    transform: scale(1.05);
+  }
+}
+
+.ai-typing {
+  animation: ai-typing-pulse 1.5s ease-in-out infinite;
+}
+
+/* AI action flare */
+@keyframes ai-action-flare {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+.ai-action-flare {
+  animation: ai-action-flare 0.6s ease-out forwards;
+}
+
+/* AI Response received ripple */
+@keyframes ai-response-ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.15);
+    opacity: 0;
+  }
+}
+
+.ai-response-ripple {
+  animation: ai-response-ripple 0.8s ease-out forwards;
+}
+
+/* Data whisper particles (toward assistant) */
+@keyframes data-whisper {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0);
+  }
+  20% {
+    opacity: 0.6;
+  }
+  80% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--whisper-x, 100px), var(--whisper-y, -50px)) scale(0.5);
+  }
+}
+
+.data-whisper-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--mood-accent, #8b5cf6);
+  box-shadow: 0 0 8px var(--mood-glow, rgba(139, 92, 246, 0.6));
+  animation: data-whisper 2s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Speaking pulse (synced to message flow) */
+@keyframes speaking-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.85;
+  }
+}
+
+.speaking-pulse {
+  animation: speaking-pulse 0.8s ease-in-out infinite;
+}
+
+/* Mood transition overlay */
+@keyframes mood-transition {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.mood-transition-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--mood-glow, rgba(139, 92, 246, 0.2));
+  pointer-events: none;
+  z-index: 50;
+  animation: mood-transition 2s ease-out forwards;
+}
+
+/* AI particle ring (aura behind assistant) */
+.ai-particle-ring {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    transparent 40%,
+    var(--mood-glow, rgba(139, 92, 246, 0.3)) 60%,
+    transparent 80%
+  );
+  animation: glow-pulse 3s ease-in-out infinite;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Idle dim */
+@keyframes idle-dim {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.ai-idle-dim {
+  animation: idle-dim 6s ease-in-out infinite;
+}
+
+/* Mood-reactive border */
+.mood-border {
+  border-color: var(--mood-accent, #06b6d4);
+  box-shadow: 0 0 20px var(--mood-shadow, rgba(6, 182, 212, 0.1));
+  transition: border-color 1.5s ease, box-shadow 1.5s ease;
+}
+
+/* Brightness shift for energy levels */
+.energy-brightness {
+  filter: brightness(calc(0.9 + var(--mood-intensity, 0.5) * 0.2));
+  transition: filter 1s ease;
+}

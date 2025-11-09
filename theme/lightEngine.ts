@@ -125,6 +125,16 @@ export const applyLightState = (lightState: LightState): void => {
   root.style.setProperty('--ambient-warmth', lightState.warmth.toString());
 };
 
+// Apply mood-based lighting overlay
+export const applyMoodLighting = (moodColors: { accentColor: string; glowColor: string; shadowTint: string; intensity: number }): void => {
+  const root = document.documentElement;
+  
+  root.style.setProperty('--mood-accent', moodColors.accentColor);
+  root.style.setProperty('--mood-glow', moodColors.glowColor);
+  root.style.setProperty('--mood-shadow', moodColors.shadowTint);
+  root.style.setProperty('--mood-intensity', moodColors.intensity.toString());
+};
+
 // Hook-like function for components to use
 export const useLightEngine = (theme: ThemeType, dayPeriod: DayPeriod): LightState => {
   const lightState = updateLightMood(theme, dayPeriod);
