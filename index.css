@@ -1,0 +1,189 @@
+/* Global CSS Variables - Updated by ThemeEngine */
+:root {
+  --accent-color: #3b82f6;
+  --glass-bg: rgba(59, 130, 246, 0.10);
+  --text-primary: #0f172a;
+  --text-muted: #475569;
+  
+  /* Smooth transitions for theme changes */
+  --theme-transition: 300ms ease-in-out;
+}
+
+/* Apply smooth transitions to variables */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: var(--theme-transition);
+}
+
+/* Preserve intentional transitions on elements */
+[class*="transition-"] {
+  transition-property: inherit !important;
+  transition-timing-function: inherit !important;
+  transition-duration: inherit !important;
+}
+
+/* =========================
+   AMBIENT BACKGROUND ANIMATIONS
+   GPU-accelerated, subtle effects
+   ========================= */
+
+/* Clear sky - gentle gradient motion */
+@keyframes gradient-shift {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-15px) scale(1.02);
+    opacity: 0.4;
+  }
+}
+
+.animate-gradient-shift {
+  animation: gradient-shift 20s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Rain - diagonal drift */
+@keyframes rain-drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  100% {
+    transform: translate(-30px, 50px);
+  }
+}
+
+.animate-rain-drift {
+  animation: rain-drift 8s linear infinite;
+  will-change: transform;
+}
+
+/* Rain streaks - lightweight */
+.rain-streaks {
+  background: repeating-linear-gradient(
+    110deg,
+    transparent,
+    transparent 15px,
+    rgba(255, 255, 255, 0.03) 15px,
+    rgba(255, 255, 255, 0.03) 16px
+  );
+  animation: rain-drift 8s linear infinite;
+}
+
+/* Cloudy - slow drift */
+@keyframes cloud-drift-slow {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(20px, -10px);
+  }
+}
+
+@keyframes cloud-drift-medium {
+  0%, 100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-25px, 15px);
+  }
+}
+
+.animate-cloud-drift-slow {
+  animation: cloud-drift-slow 40s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-cloud-drift-medium {
+  animation: cloud-drift-medium 30s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Snow - gentle particle drift */
+@keyframes snow-drift {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 0.15;
+  }
+  50% {
+    transform: translate(-10px, 20px) rotate(5deg);
+    opacity: 0.25;
+  }
+}
+
+.animate-snow-drift {
+  animation: snow-drift 25s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* Night - subtle glow pulse */
+@keyframes night-glow {
+  0%, 100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.animate-night-glow {
+  animation: night-glow 15s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Night stars - tiny dots */
+.stars-layer {
+  background-image: 
+    radial-gradient(1px 1px at 20% 30%, white, transparent),
+    radial-gradient(1px 1px at 60% 70%, white, transparent),
+    radial-gradient(1px 1px at 50% 50%, white, transparent),
+    radial-gradient(1px 1px at 80% 10%, white, transparent),
+    radial-gradient(1px 1px at 90% 60%, white, transparent),
+    radial-gradient(1px 1px at 30% 80%, white, transparent),
+    radial-gradient(1px 1px at 15% 50%, white, transparent),
+    radial-gradient(1px 1px at 70% 20%, white, transparent);
+  background-size: 300px 300px;
+  background-position: 0 0, 40px 60px, 130px 270px, 70px 100px, 150px 50px, 220px 180px, 90px 200px, 180px 30px;
+  animation: stars-twinkle 3s ease-in-out infinite alternate;
+}
+
+@keyframes stars-twinkle {
+  0% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* =========================
+   GLASSMORPHISM UTILITIES
+   ========================= */
+
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.glass-card-hover:hover {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+}
+
+/* Preserve smooth touch/click interactions */
+button, a, [role="button"] {
+  transition: all 0.2s ease !important;
+}
+
+/* Ensure animated elements don't cause layout shifts */
+[class*="animate-"] {
+  backface-visibility: hidden;
+  perspective: 1000px;
+}

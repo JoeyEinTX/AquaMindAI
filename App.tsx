@@ -1,10 +1,11 @@
 
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { WeatherData, SprinklerZone, WateringSchedule, WateringPreference, SystemStatus, ChatMessage, DailySchedule, Notification, FollowUpAction, ScheduleEvent, User, ProactiveSuggestionResponse, NotificationAction } from './types';
 import { getWeather } from './services/weatherService';
 import { generateWateringSchedule, processUserChat, getProactiveSuggestions } from './services/geminiService';
 import { calculateWaterUsage } from './services/waterUsageService';
+import { SHOWCASE_MODE, getDemoZones, getDemoWeather, getDemoSchedule } from './utils/showcaseMode';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -14,9 +15,17 @@ import ManageZonesModal from './components/ManageZonesModal';
 import ZipCodeModal from './components/ZipCodeModal';
 import NotificationContainer from './components/NotificationContainer';
 import Login from './components/Login';
-import ApiKeySelection from './components/ApiKeySelection';
 import ChatModal from './components/ChatModal';
 import SettingsModal from './components/SettingsModal';
+import { OnboardingWalkthrough } from './components/OnboardingWalkthrough';
+import { AISuggestionsPanel } from './components/AISuggestionsPanel';
+import { apiClient } from './api/client';
+import { ConnectionStatusBadge } from './components/ConnectionStatusBadge';
+import { AmbientBackground } from './components/AmbientBackground';
+import { useThemeEngine } from './theme/themeEngine';
+
+// Lazy load heavy components
+const AssistantPanel = lazy(() => import('./components/AssistantPanel').then(module => ({ default: module.AssistantPanel })));
 
 const annotateScheduleChanges = (
     baseSchedule: WateringSchedule,
@@ -97,7 +106,7 @@ const annotateScheduleChanges = (
 
 
 const App: React.FC = () => {
-  const defaultZones: SprinklerZone[] = [
+  const defaultZones: SprinklerZone[] = SHOWCASE_MODE ? getDemoZones() : [
     { id: 1, name: 'Front Lawn', enabled: true, isWatering: false, relay: 1, plantType: 'Grass', sprinklerType: 'Spray', sunExposure: 'Full Sun', waterRequirement: 'Standard', headDetails: { arc180: 10, arc90: 5 } },
     { id: 2, name: 'Flower Beds', enabled: true, isWatering: false, relay: 2, plantType: 'Flowers', sprinklerType: 'Drip', sunExposure: 'Partial Shade', waterRequirement: 'Standard', flowRateGPH: 20 },
     { id: 3, name: 'Vegetable Garden', enabled: true, isWatering: false, relay: 3, plantType: 'Vegetables', sprinklerType: 'Spray', sunExposure: 'Full Sun', waterRequirement: 'High', headDetails: { arc180: 10 } },
@@ -108,7 +117,6 @@ const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [currentUser, setCurrentUser] = useState<string | null>('admin');
   const [users, setUsers] = useState<User[]>([]);
-  const [isApiKeySelected, setIsApiKeySelected] = useState(false);
 
   const [zones, setZones] = useState<SprinklerZone[]>(() => {
     try {
@@ -153,13 +161,6 @@ const App: React.FC = () => {
   const [followUpAction, setFollowUpAction] = useState<FollowUpAction | null>(null);
   const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-
-  // Check for API Key on initial load
-  useEffect(() => {
-    (async () => {
-        setIsApiKeySelected(await window.aistudio.hasSelectedApiKey());
-    })();
-  }, []);
 
   // Initialize users from localStorage or set default
   useEffect(() => {
@@ -247,6 +248,16 @@ const App: React.FC = () => {
     addNotification('Notification history cleared.', 'success');
   };
 
+  // Initialize backend connection on app startup
+  useEffect(() => {
+    if (isAuthenticated && !SHOWCASE_MODE) {
+      console.log('[APP] Initializing backend connection...');
+      apiClient.initialize().catch(error => {
+        console.error('[APP] Failed to initialize backend:', error);
+        addNotification('Failed to connect to backend. Some features may not work properly.', 'error');
+      });
+    }
+  }, [isAuthenticated, addNotification]);
 
   // Effect to manage countdown timers for manual watering.
   useEffect(() => {
@@ -323,8 +334,20 @@ const App: React.FC = () => {
     setZones(prevZones => prevZones.map(z => ({ ...z, isWatering: false, manualWateringEndTime: undefined })));
   };
   
+  // Load demo data in showcase mode
+  useEffect(() => {
+    if (SHOWCASE_MODE && isAuthenticated) {
+      setWeather(getDemoWeather());
+      setSchedule(getDemoSchedule());
+      setIsScheduleImplemented(true);
+      setSystemStatus('AI Schedule Active');
+    }
+  }, [SHOWCASE_MODE, isAuthenticated]);
+
   useEffect(() => {
     const fetchWeather = async () => {
+        if (SHOWCASE_MODE) return; // Skip real weather fetch in showcase mode
+        
         if (zipCode && /^\d{5}$/.test(zipCode)) {
             setLocationError(null);
             setWeather(null); // Clear old weather to show loading state in card
@@ -362,12 +385,11 @@ const App: React.FC = () => {
         let userMessage = 'Failed to communicate with the AI model. Please try again.';
 
         if (errorMessage.includes("Requested entity was not found")) {
-            userMessage = 'Your API key appears to be invalid. Please select a new one.';
-            addNotification('API key is invalid. Please select a new key.', 'info');
-            setIsApiKeySelected(false); // Force re-selection
+            userMessage = 'Your API key appears to be invalid.';
+            addNotification('API key is invalid.', 'info');
         } else if (errorMessage.includes("RESOURCE_EXHAUSTED") || errorMessage.includes("429")) {
-            userMessage = 'You have exceeded your API quota. Please select a different key or wait for your quota to reset.';
-            addNotification('API quota exceeded. Try selecting a different key.', 'info');
+            userMessage = 'You have exceeded your API quota. Please wait for your quota to reset.';
+            addNotification('API quota exceeded.', 'info');
         }
 
         return userMessage;
@@ -376,6 +398,12 @@ const App: React.FC = () => {
 
   const handleGenerateSchedule = useCallback(async () => {
     if (!weather) return;
+    
+    // In showcase mode, don't regenerate - use demo data
+    if (SHOWCASE_MODE) {
+      addNotification('Showcase mode: Using demonstration schedule', 'info');
+      return;
+    }
 
     const shouldPreserveStatus = systemStatus === 'Disabled' || systemStatus.startsWith('Watering:');
 
@@ -636,11 +664,24 @@ const App: React.FC = () => {
     setCurrentUser(null);
   };
 
+  // Initialize theme engine
+  const themeState = useThemeEngine(zipCode, weather);
+
+  // Update CSS variables when theme changes
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-color', themeState.accentColor);
+    root.style.setProperty('--glass-bg', themeState.glassColor);
+    root.style.setProperty('--text-primary', themeState.textPrimary);
+    root.style.setProperty('--text-muted', themeState.textMuted);
+  }, [themeState]);
+
   return (
     <div className="min-h-screen bg-slate-200 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors duration-300">
-        {!isApiKeySelected ? (
-            <ApiKeySelection onKeySelected={() => setIsApiKeySelected(true)} />
-        ) : !isAuthenticated ? (
+        {/* Ambient Background - Behind everything */}
+        {isAuthenticated && <AmbientBackground themeState={themeState} />}
+        
+        {!isAuthenticated ? (
             <Login onLogin={handleLogin} onCreateUser={handleCreateUser} />
         ) : (
             <>
@@ -685,7 +726,17 @@ const App: React.FC = () => {
                     onOpenChatModal={() => setIsChatModalOpen(true)}
                     onDayClick={handleOpenDailyDetail}
                     />
+                    
+                    {/* AI Suggestions Panel - Only in showcase mode */}
+                    {SHOWCASE_MODE && (
+                      <div className="mt-6">
+                        <AISuggestionsPanel isScheduleImplemented={isScheduleImplemented} />
+                      </div>
+                    )}
                 </main>
+                
+                {/* Onboarding Walkthrough */}
+                <OnboardingWalkthrough />
                 
                 <ChatModal
                     isOpen={isChatModalOpen}
@@ -733,6 +784,14 @@ const App: React.FC = () => {
                     onDeleteUser={handleDeleteUser}
                     addNotification={addNotification}
                 />
+                
+                {/* AI Assistant Panel - Lazy loaded */}
+                <Suspense fallback={<div />}>
+                  <AssistantPanel />
+                </Suspense>
+                
+                {/* Connection Status Badge - Bottom-left corner */}
+                <ConnectionStatusBadge />
             </>
         )}
     </div>
