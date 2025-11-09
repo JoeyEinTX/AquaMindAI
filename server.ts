@@ -12,6 +12,10 @@ import { serverWeatherService } from './services/weatherService.server.js';
 import { advisoryEngine } from './services/advisoryEngine.js';
 import { memoryEngine } from './services/memoryEngine.js';
 import { conversationManager } from './services/conversationManager.js';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1613,6 +1617,58 @@ function getNetworkIPs(): string[] {
   
   return ips;
 }
+
+// Environment switching endpoint
+app.post('/api/env/switch', async (req, res) => {
+  try {
+    const { mode } = req.body;
+    
+    // Validate mode
+    if (!mode || !['localhost', 'lan', 'auto'].includes(mode)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid mode. Must be "localhost", "lan", or "auto"' 
+      });
+    }
+    
+    console.log(`[ENV] Switching to ${mode.toUpperCase()} mode...`);
+    
+    // Execute the environment switch script
+    const script = `npm run set:${mode}`;
+    
+    try {
+      const { stdout, stderr } = await execAsync(script);
+      
+      if (stderr && !stderr.includes('[ENV]')) {
+        console.error('[ENV] Script stderr:', stderr);
+      }
+      
+      if (stdout) {
+        console.log('[ENV] Script output:', stdout);
+      }
+      
+      console.log(`[ENV] Successfully switched to ${mode.toUpperCase()} mode`);
+      
+      res.json({ 
+        success: true, 
+        mode,
+        message: `Environment switched to ${mode} mode. Please reload the application.`
+      });
+    } catch (execError: any) {
+      console.error('[ENV] Error executing switch script:', execError);
+      res.status(500).json({ 
+        success: false, 
+        error: execError.message || 'Failed to execute environment switch script' 
+      });
+    }
+  } catch (error) {
+    console.error('[ENV] Error in environment switch endpoint:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error occurred' 
+    });
+  }
+});
 
 // Config endpoint - returns dynamic backend configuration
 app.get('/config', (req, res) => {

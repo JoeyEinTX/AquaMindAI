@@ -25,6 +25,8 @@ import { AmbientBackground } from './components/AmbientBackground';
 import { useThemeEngine } from './theme/themeEngine';
 import { NetworkLinkAnimation } from './components/NetworkLinkAnimation';
 import { useNetworkLinkEffect } from './hooks/useNetworkLinkEffect';
+import { VisualPulseOverlay } from './components/VisualPulseOverlay';
+import { useSynestheticFeedback } from './hooks/useSynestheticFeedback';
 
 // Lazy load heavy components
 const AssistantPanel = lazy(() => import('./components/AssistantPanel').then(module => ({ default: module.AssistantPanel })));
@@ -671,6 +673,9 @@ const App: React.FC = () => {
   
   // Initialize network link animation
   const networkLinkState = useNetworkLinkEffect();
+  
+  // Initialize synesthetic feedback system
+  const synestheticState = useSynestheticFeedback();
 
   // Update CSS variables when theme changes
   useEffect(() => {
@@ -805,6 +810,9 @@ const App: React.FC = () => {
                     onAnimationComplete={networkLinkState.onAnimationComplete}
                   />
                 )}
+                
+                {/* Visual Pulse Overlay - Synesthetic feedback */}
+                <VisualPulseOverlay event={synestheticState.currentEvent} />
             </>
         )}
     </div>

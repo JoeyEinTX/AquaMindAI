@@ -906,3 +906,47 @@ button, a, [role="button"] {
 .network-link-disconnected {
   animation: disconnectedFlicker 2.5s ease-in-out forwards;
 }
+
+/* =========================
+   SYNESTHETIC FEEDBACK ANIMATIONS
+   ========================= */
+
+/* Light pulse for visual feedback overlay */
+@keyframes lightPulse {
+  0% { 
+    opacity: 0; 
+    filter: blur(10px);
+    transform: scale(0.95);
+  }
+  50% { 
+    opacity: 0.6; 
+    filter: blur(25px);
+    transform: scale(1.05);
+  }
+  100% { 
+    opacity: 0; 
+    filter: blur(10px);
+    transform: scale(1);
+  }
+}
+
+.pulse-overlay {
+  animation: lightPulse 2s ease-in-out forwards;
+  will-change: opacity, filter, transform;
+}
+
+/* Continuous pulse for reconnecting state */
+@keyframes continuousPulse {
+  0%, 100% {
+    opacity: 0.3;
+    filter: blur(15px);
+  }
+  50% {
+    opacity: 0.6;
+    filter: blur(25px);
+  }
+}
+
+.pulse-continuous {
+  animation: continuousPulse 2s ease-in-out infinite;
+}

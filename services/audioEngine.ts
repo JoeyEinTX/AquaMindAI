@@ -216,6 +216,72 @@ class AudioEngine {
     };
   }
 
+  // Play synesthetic tone (for connection and mood events)
+  private activeTones: Map<string, { source: AudioBufferSourceNode; gain: GainNode }> = new Map();
+
+  async playTone(name: string, loop: boolean = false): Promise<void> {
+    if (!this.audioContext || this.settings.muted) return;
+    
+    // If tone is already playing, don't restart
+    if (this.activeTones.has(name)) return;
+    
+    // Load tone if not in UI buffers
+    if (!this.uiBuffers.has(name)) {
+      const buffer = await this.loadAudioFile(`/audio/sfx/${name}`);
+      if (buffer) {
+        this.uiBuffers.set(name, buffer);
+      } else {
+        return;
+      }
+    }
+    
+    const buffer = this.uiBuffers.get(name);
+    if (!buffer) return;
+    
+    const source = this.audioContext.createBufferSource();
+    const gain = this.audioContext.createGain();
+    
+    source.buffer = buffer;
+    source.loop = loop;
+    source.connect(gain);
+    gain.connect(this.audioContext.destination);
+    
+    // Start at low volume and fade in
+    gain.gain.value = 0;
+    const targetVolume = this.settings.masterVolume * this.settings.uiVolume * 0.7;
+    const now = this.audioContext.currentTime;
+    gain.gain.linearRampToValueAtTime(targetVolume, now + 0.3);
+    
+    source.start(0);
+    
+    this.activeTones.set(name, { source, gain });
+    
+    if (!loop) {
+      source.onended = () => {
+        this.activeTones.delete(name);
+        source.disconnect();
+        gain.disconnect();
+      };
+    }
+  }
+
+  stopTone(name: string): void {
+    const tone = this.activeTones.get(name);
+    if (!tone || !this.audioContext) return;
+    
+    const now = this.audioContext.currentTime;
+    
+    // Fade out
+    tone.gain.gain.linearRampToValueAtTime(0, now + 0.3);
+    
+    setTimeout(() => {
+      tone.source.stop();
+      tone.source.disconnect();
+      tone.gain.disconnect();
+      this.activeTones.delete(name);
+    }, 300);
+  }
+
   // Apply mood to ambient audio (adjust volume/pitch)
   applyMood(moodTone: MoodTone, energy: number): void {
     if (!this.currentAmbientGain || !this.audioContext) return;

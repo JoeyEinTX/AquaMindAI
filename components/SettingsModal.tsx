@@ -7,6 +7,7 @@ import { ServerIcon } from './icons/ServerIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
+import EnvironmentSwitcher from './EnvironmentSwitcher';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -33,6 +34,7 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
     const [rippleIntensity, setRippleIntensity] = useState<'off' | 'subtle' | 'normal'>('normal');
     const [motionEffects, setMotionEffects] = useState(true);
     const [hapticsEnabled, setHapticsEnabled] = useState(true);
+    const [synestheticEnabled, setSynestheticEnabled] = useState(true);
     
     // Load interaction settings from localStorage
     useEffect(() => {
@@ -44,6 +46,16 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
         
         const savedHaptics = localStorage.getItem('hapticsEnabled');
         if (savedHaptics !== null) setHapticsEnabled(savedHaptics === 'true');
+        
+        const savedSynesthetic = localStorage.getItem('synestheticSettings');
+        if (savedSynesthetic) {
+            try {
+                const settings = JSON.parse(savedSynesthetic);
+                setSynestheticEnabled(settings.enabled ?? true);
+            } catch (e) {
+                setSynestheticEnabled(true);
+            }
+        }
     }, []);
     
     const handleRippleChange = (value: 'off' | 'subtle' | 'normal') => {
@@ -71,6 +83,16 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
         localStorage.setItem('hapticsEnabled', String(newValue));
         console.log('[HAPTICS] Toggled to', newValue);
         addNotification(`Haptic feedback ${newValue ? 'enabled' : 'disabled'}`, 'success');
+    };
+    
+    const handleSynestheticToggle = () => {
+        const newValue = !synestheticEnabled;
+        setSynestheticEnabled(newValue);
+        localStorage.setItem('synestheticSettings', JSON.stringify({ enabled: newValue }));
+        console.log('[SYNESTHETIC] Toggled to', newValue);
+        addNotification(`Multi-sensory feedback ${newValue ? 'enabled' : 'disabled'}`, 'success');
+        // Trigger storage event to update the engine
+        window.dispatchEvent(new Event('storage'));
     };
 
     if (!isOpen) return null;
@@ -160,23 +182,29 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
 
     const renderNetworkTab = () => (
         <div className="space-y-6">
-             <h4 className="font-bold text-lg text-white">Device & Network</h4>
-             <div className="p-4 bg-slate-700/50 rounded-lg">
-                <p className="text-sm font-medium text-slate-400 mb-2">Current Connection</p>
-                <div className="flex items-center space-x-3 text-white">
-                    <WifiIcon className="w-6 h-6 text-green-400"/>
-                    <div>
-                        <p className="font-semibold">HomeNetwork-5G</p>
-                        <p className="text-xs text-slate-300">IP: 192.168.1.123</p>
+             {/* Environment Mode Switcher */}
+             <EnvironmentSwitcher addNotification={addNotification} />
+             
+             {/* Network Info Section */}
+             <div>
+                 <h4 className="font-bold text-lg text-white mb-4">Device & Network</h4>
+                 <div className="p-4 bg-slate-700/50 rounded-lg">
+                    <p className="text-sm font-medium text-slate-400 mb-2">Current Connection</p>
+                    <div className="flex items-center space-x-3 text-white">
+                        <WifiIcon className="w-6 h-6 text-green-400"/>
+                        <div>
+                            <p className="font-semibold">HomeNetwork-5G</p>
+                            <p className="text-xs text-slate-300">IP: 192.168.1.123</p>
+                        </div>
                     </div>
-                </div>
+                 </div>
+                 <button
+                    onClick={() => addNotification('Network scanning is a simulated feature.', 'info')}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-4 rounded-lg mt-4"
+                 >
+                    Change Wi-Fi Network
+                </button>
              </div>
-             <button
-                onClick={() => addNotification('Network scanning is a simulated feature.', 'info')}
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2.5 px-4 rounded-lg"
-             >
-                Change Wi-Fi Network
-            </button>
         </div>
     );
 
@@ -242,6 +270,29 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
                             type="checkbox"
                             checked={hapticsEnabled}
                             onChange={handleHapticsToggle}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+            
+            {/* Synesthetic Feedback */}
+            <div className="p-4 bg-slate-700/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <label className="block text-sm font-medium text-white">
+                            Multi-Sensory Feedback
+                        </label>
+                        <p className="text-xs text-slate-400 mt-1">
+                            Unified audio-visual cues for system events
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox"
+                            checked={synestheticEnabled}
+                            onChange={handleSynestheticToggle}
                             className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
