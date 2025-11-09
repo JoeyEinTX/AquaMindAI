@@ -23,6 +23,8 @@ import { apiClient } from './api/client';
 import { ConnectionStatusBadge } from './components/ConnectionStatusBadge';
 import { AmbientBackground } from './components/AmbientBackground';
 import { useThemeEngine } from './theme/themeEngine';
+import { NetworkLinkAnimation } from './components/NetworkLinkAnimation';
+import { useNetworkLinkEffect } from './hooks/useNetworkLinkEffect';
 
 // Lazy load heavy components
 const AssistantPanel = lazy(() => import('./components/AssistantPanel').then(module => ({ default: module.AssistantPanel })));
@@ -666,6 +668,9 @@ const App: React.FC = () => {
 
   // Initialize theme engine
   const themeState = useThemeEngine(zipCode, weather);
+  
+  // Initialize network link animation
+  const networkLinkState = useNetworkLinkEffect();
 
   // Update CSS variables when theme changes
   useEffect(() => {
@@ -792,6 +797,14 @@ const App: React.FC = () => {
                 
                 {/* Connection Status Badge - Bottom-left corner */}
                 <ConnectionStatusBadge />
+                
+                {/* Network Link Animation - Appears above all */}
+                {networkLinkState.shouldShow && (
+                  <NetworkLinkAnimation
+                    connectionState={networkLinkState.connectionState}
+                    onAnimationComplete={networkLinkState.onAnimationComplete}
+                  />
+                )}
             </>
         )}
     </div>

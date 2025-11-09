@@ -785,3 +785,124 @@ button, a, [role="button"] {
   filter: brightness(calc(0.9 + var(--mood-intensity, 0.5) * 0.2));
   transition: filter 1s ease;
 }
+
+/* =========================
+   NETWORK LINK ANIMATIONS
+   ========================= */
+
+/* Base network link path animation */
+@keyframes linkPulse {
+  0% { 
+    stroke-opacity: 0.2; 
+    filter: blur(4px); 
+  }
+  50% { 
+    stroke-opacity: 0.8; 
+    filter: blur(8px); 
+  }
+  100% { 
+    stroke-opacity: 0; 
+    filter: blur(4px); 
+  }
+}
+
+.network-link-path {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  animation: linkPulse 3s ease-in-out forwards;
+  will-change: stroke-opacity, filter;
+}
+
+.network-link-glow {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  animation: linkPulse 3s ease-in-out forwards;
+  will-change: stroke-opacity, filter;
+}
+
+/* Connected state - cyan pulse */
+@keyframes connectedPulse {
+  0% { 
+    stroke-opacity: 0.3; 
+    filter: blur(4px);
+  }
+  50% { 
+    stroke-opacity: 0.9; 
+    filter: blur(10px); 
+  }
+  100% { 
+    stroke-opacity: 0; 
+    filter: blur(6px); 
+  }
+}
+
+.network-link-connected {
+  animation: connectedPulse 3s ease-in-out forwards;
+}
+
+/* Reconnecting state - amber dashed motion */
+@keyframes dashMove {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -50;
+  }
+}
+
+@keyframes reconnectingPulse {
+  0% { 
+    stroke-opacity: 0.4; 
+    filter: blur(3px);
+  }
+  50% { 
+    stroke-opacity: 0.7; 
+    filter: blur(6px); 
+  }
+  100% { 
+    stroke-opacity: 0; 
+    filter: blur(4px); 
+  }
+}
+
+.network-link-reconnecting {
+  stroke-dasharray: 10 5;
+  animation: 
+    reconnectingPulse 3s ease-in-out forwards,
+    dashMove 1.5s linear infinite;
+}
+
+/* Disconnected state - red flicker fade */
+@keyframes disconnectedFlicker {
+  0% { 
+    stroke-opacity: 0.5; 
+    filter: blur(3px);
+  }
+  10% { 
+    stroke-opacity: 0.2; 
+  }
+  20% { 
+    stroke-opacity: 0.6; 
+    filter: blur(5px);
+  }
+  30% { 
+    stroke-opacity: 0.3; 
+  }
+  40% { 
+    stroke-opacity: 0.7; 
+    filter: blur(8px);
+  }
+  50% { 
+    stroke-opacity: 0.4; 
+  }
+  100% { 
+    stroke-opacity: 0; 
+    filter: blur(4px); 
+  }
+}
+
+.network-link-disconnected {
+  animation: disconnectedFlicker 2.5s ease-in-out forwards;
+}
