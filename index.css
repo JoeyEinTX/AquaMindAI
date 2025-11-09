@@ -187,3 +187,139 @@ button, a, [role="button"] {
   backface-visibility: hidden;
   perspective: 1000px;
 }
+
+/* =========================
+   GLASS COMPONENT ANIMATIONS
+   ========================= */
+
+/* Gradient sweep on hover */
+@keyframes gradient-sweep {
+  0% {
+    transform: translateX(-100%) translateY(-100%);
+  }
+  100% {
+    transform: translateX(100%) translateY(100%);
+  }
+}
+
+.animate-gradient-sweep {
+  animation: gradient-sweep 3s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Ambient glow pulse */
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.5;
+    filter: blur(8px);
+  }
+  50% {
+    opacity: 0.8;
+    filter: blur(12px);
+  }
+}
+
+.animate-glow {
+  animation: glow-pulse 4s ease-in-out infinite;
+  will-change: opacity, filter;
+}
+
+/* Count up animation for numbers */
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-count-up {
+  animation: count-up 0.5s ease-out;
+}
+
+/* Droplet fill animation */
+@keyframes droplet-fill {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-droplet-fill {
+  animation: droplet-fill 0.8s ease-out forwards;
+}
+
+/* =========================
+   GLASS BUTTON & MODAL UTILITIES
+   ========================= */
+
+.glass-button {
+  background: var(--glass-bg);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+  color: var(--text-primary);
+}
+
+.glass-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: var(--accent-color);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.glass-button:active {
+  transform: translateY(0);
+}
+
+.glass-button-primary {
+  background: var(--accent-color);
+  border: 1px solid var(--accent-color);
+  color: white;
+}
+
+.glass-button-primary:hover {
+  background: var(--accent-color);
+  opacity: 0.9;
+  box-shadow: 0 8px 20px rgba(var(--accent-color), 0.3);
+}
+
+.glass-modal {
+  background: var(--glass-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+}
+
+/* Glass input fields */
+.glass-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.glass-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--accent-color);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--accent-color), 0.1);
+}
+
+.glass-input::placeholder {
+  color: var(--text-muted);
+}
