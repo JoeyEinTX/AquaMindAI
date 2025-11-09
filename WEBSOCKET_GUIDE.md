@@ -11,10 +11,10 @@ The AquaMind backend now includes a WebSocket server for realtime updates. This 
 Add to your `.env` file:
 
 ```env
-WS_PORT=3002
+WS_PORT=3003
 ```
 
-Default port is `3002` if not specified.
+Default port is `3003` if not specified.
 
 ## WebSocket Events
 
@@ -231,7 +231,7 @@ Create an HTML file to test in the browser:
   <div id="events"></div>
   
   <script>
-    const socket = io('http://localhost:3002');
+    const socket = io('http://localhost:3003');
     const eventsDiv = document.getElementById('events');
     
     socket.on('connect', () => {
@@ -320,7 +320,7 @@ export const useWebSocket = () => {
   const isConnected = ref(false);
   
   onMounted(() => {
-    socket.value = io('http://localhost:3002', {
+    socket.value = io('http://localhost:3003', {
       transports: ['websocket']
     });
     
@@ -380,11 +380,11 @@ When using multiple backend instances, enable sticky sessions in your load balan
 
 1. **Check port availability:**
    ```bash
-   netstat -an | grep 3002
+   netstat -an | grep 3003
    ```
 
 2. **Verify WebSocket server is running:**
-   - Check console for `[WS] WebSocket server initialized on port 3002`
+   - Check console for `[WS] WebSocket server initialized on port 3003`
 
 3. **Test with the test client:**
    ```bash

@@ -2,9 +2,11 @@
  * Socket.IO Client for AquaMind WebSocket Integration
  * 
  * Provides realtime updates from backend with automatic reconnection
+ * and dynamic port detection
  */
 
 import { io, Socket } from 'socket.io-client';
+import { getWsBaseUrl, isBackendInitialized, apiClient } from './client';
 
 // WebSocket event types
 export type SocketEvent = 
@@ -13,6 +15,7 @@ export type SocketEvent =
   | 'rainDelayChanged'
   | 'scheduleTriggered'
   | 'logUpdated'
+  | 'healthUpdated'
   | 'heartbeat'
   | 'status';
 
@@ -23,19 +26,29 @@ class SocketClient {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private isConnecting = false;
+  private connectionRetryTimeout: NodeJS.Timeout | null = null;
 
   /**
    * Initialize and connect to WebSocket server
+   * Automatically uses the dynamic backend configuration
    */
-  connect(): void {
+  async connect(): Promise<void> {
     if (this.socket?.connected || this.isConnecting) {
       return;
     }
 
     this.isConnecting = true;
-    const wsUrl = import.meta.env.VITE_WS_BASE_URL || 'http://localhost:3002';
 
     try {
+      // Ensure backend config is initialized first
+      if (!isBackendInitialized()) {
+        console.log('[WS] Waiting for backend configuration...');
+        await apiClient.initialize();
+      }
+
+      const wsUrl = getWsBaseUrl();
+      console.log(`[WS] Connecting to ${wsUrl}...`);
+
       this.socket = io(wsUrl, {
         transports: ['websocket', 'polling'],
         reconnection: true,
@@ -46,9 +59,30 @@ class SocketClient {
 
       this.setupEventHandlers();
     } catch (error) {
-      console.error('[WS] Connection error:', error);
+      console.error('[WS] Connection initialization error:', error);
       this.isConnecting = false;
+      
+      // Retry connection after delay
+      this.scheduleReconnect();
     }
+  }
+
+  /**
+   * Schedule a reconnection attempt
+   */
+  private scheduleReconnect(): void {
+    if (this.connectionRetryTimeout) {
+      return; // Already scheduled
+    }
+
+    const delay = Math.min(2000 * Math.pow(2, this.reconnectAttempts), 30000);
+    console.log(`[WS] Scheduling reconnect in ${delay}ms...`);
+
+    this.connectionRetryTimeout = setTimeout(() => {
+      this.connectionRetryTimeout = null;
+      this.reconnectAttempts++;
+      this.connect();
+    }, delay);
   }
 
   /**
@@ -58,23 +92,38 @@ class SocketClient {
     if (!this.socket) return;
 
     this.socket.on('connect', () => {
-      console.log('[WS] Connected');
+      const wsUrl = getWsBaseUrl();
+      console.log(`[CONFIG] WebSocket connected at ${wsUrl}`);
       this.reconnectAttempts = 0;
       this.isConnecting = false;
+      
+      // Clear any pending reconnection
+      if (this.connectionRetryTimeout) {
+        clearTimeout(this.connectionRetryTimeout);
+        this.connectionRetryTimeout = null;
+      }
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('[WS] Disconnected:', reason);
       this.isConnecting = false;
+      
+      // If disconnected due to server issues, schedule reconnect
+      if (reason === 'io server disconnect' || reason === 'transport close') {
+        this.scheduleReconnect();
+      }
     });
 
     this.socket.on('connect_error', (error) => {
       console.warn('[WS] Connection error:', error.message);
-      this.reconnectAttempts++;
       this.isConnecting = false;
       
-      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.warn('[WS] Max reconnection attempts reached. Falling back to polling.');
+      // Backend might have restarted on different port
+      if (this.reconnectAttempts >= 3) {
+        console.log('[WS] Multiple connection failures, backend may have changed ports. Refreshing config...');
+        this.refreshConnectionAfterConfigUpdate();
+      } else {
+        this.reconnectAttempts++;
       }
     });
 
@@ -84,8 +133,42 @@ class SocketClient {
     });
 
     this.socket.on('reconnect_failed', () => {
-      console.warn('[WS] Reconnection failed. Falling back to polling.');
+      console.warn('[WS] Reconnection failed. Will retry with config refresh...');
+      this.refreshConnectionAfterConfigUpdate();
     });
+
+    this.socket.on('error', (error) => {
+      console.error('[WS] Socket error:', error);
+    });
+  }
+
+  /**
+   * Refresh config and reconnect
+   */
+  private async refreshConnectionAfterConfigUpdate(): Promise<void> {
+    try {
+      console.log('[WS] Refreshing backend configuration...');
+      
+      // Disconnect current socket
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+
+      // Wait a bit before refreshing config
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Force reinitialize
+      await apiClient.initialize();
+
+      // Reconnect with new config
+      this.reconnectAttempts = 0;
+      await this.connect();
+    } catch (error) {
+      console.error('[WS] Failed to refresh config and reconnect:', error);
+      // Schedule another retry
+      this.scheduleReconnect();
+    }
   }
 
   /**
@@ -120,6 +203,11 @@ class SocketClient {
    * Disconnect from WebSocket server
    */
   disconnect(): void {
+    if (this.connectionRetryTimeout) {
+      clearTimeout(this.connectionRetryTimeout);
+      this.connectionRetryTimeout = null;
+    }
+
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
@@ -141,10 +229,22 @@ class SocketClient {
   getSocket(): Socket | null {
     return this.socket;
   }
+
+  /**
+   * Manually reconnect (useful after port changes)
+   */
+  async reconnect(): Promise<void> {
+    console.log('[WS] Manual reconnect requested');
+    this.disconnect();
+    this.reconnectAttempts = 0;
+    await this.connect();
+  }
 }
 
 // Export singleton instance
 export const socketClient = new SocketClient();
 
-// Auto-connect on import
-socketClient.connect();
+// Auto-connect on import (will wait for config to be ready)
+socketClient.connect().catch(error => {
+  console.error('[WS] Initial connection failed:', error);
+});

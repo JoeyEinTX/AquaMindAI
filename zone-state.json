@@ -1,0 +1,33 @@
+{
+  "activeZoneId": null,
+  "activeZoneName": null,
+  "durationSec": 600,
+  "rainDelay": {
+    "isActive": false,
+    "hoursRemaining": 0
+  },
+  "lastRun": null,
+  "schedules": [],
+  "zones": [
+    {
+      "id": 1,
+      "name": "Zone 1",
+      "isActive": false
+    },
+    {
+      "id": 2,
+      "name": "Zone 2",
+      "isActive": false
+    },
+    {
+      "id": 3,
+      "name": "Zone 3",
+      "isActive": false
+    },
+    {
+      "id": 4,
+      "name": "Zone 4",
+      "isActive": false
+    }
+  ]
+}

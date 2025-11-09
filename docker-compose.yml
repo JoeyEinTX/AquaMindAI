@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  aquamind:
+    build: .
+    container_name: aquamind-controller
+    ports:
+      - "3001:3001"  # Backend API
+      - "3003:3003"  # WebSocket
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - WS_PORT=3003
+      - RELAY_MODE=${RELAY_MODE:-mock}
+      - GPIO_PIN_MAP=${GPIO_PIN_MAP:-1:17,2:18,3:27,4:22}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:3001}
+      - VITE_WS_BASE_URL=${VITE_WS_BASE_URL:-http://localhost:3003}
+    volumes:
+      - ./zone-state.json:/app/zone-state.json
+      - ./run-logs.json:/app/run-logs.json
+    restart: unless-stopped
+    # For Raspberry Pi GPIO access, uncomment the following:
+    # devices:
+    #   - /dev/gpiomem:/dev/gpiomem
+    # privileged: true
+
+# Optional: Add a reverse proxy for production
+#   nginx:
+#     image: nginx:alpine
+#     container_name: aquamind-proxy
+#     ports:
+#       - "80:80"
+#       - "443:443"
+#     volumes:
+#       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+#     depends_on:
+#       - aquamind
+#     restart: unless-stopped

@@ -118,3 +118,19 @@ export interface GetLogsResponse {
 export interface GetLogsParams {
   limit?: number;
 }
+
+// ============================================================================
+// Health Types
+// ============================================================================
+
+export interface SystemHealth {
+  uptimeSec: number;
+  cpuPercent: number;
+  memoryMB: number;
+  connectedClients: number;
+  lastError: {
+    message: string;
+    timestamp: string;
+  } | null;
+  timestamp: string;
+}

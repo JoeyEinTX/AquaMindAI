@@ -35,20 +35,14 @@ class WebSocketService {
   private io: Server | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
 
-  initialize(httpServer: HTTPServer, wsPort?: number): void {
-    const port = wsPort || parseInt(process.env.WS_PORT || '3002');
-    
+  initialize(httpServer: HTTPServer): void {
     this.io = new Server(httpServer, {
       cors: {
         origin: '*',
         methods: ['GET', 'POST']
       },
-      // Use specified port for WebSocket
       path: '/socket.io'
     });
-
-    // Listen on the WebSocket port
-    const wsServer = this.io.listen(port);
 
     this.io.on('connection', (socket) => {
       console.log(`[WS] Client connected: ${socket.id}`);
@@ -64,7 +58,7 @@ class WebSocketService {
     // Start heartbeat mechanism (every 30 seconds)
     this.startHeartbeat();
 
-    console.log(`[WS] WebSocket server initialized on port ${port}`);
+    console.log(`[WS] WebSocket server initialized (sharing HTTP server)`);
   }
 
   private emitInitialStatus(socketId?: string): void {
@@ -160,6 +154,19 @@ class WebSocketService {
       log: logEntry,
       timestamp: new Date().toISOString()
     });
+  }
+
+  emitHealthUpdated(health: {
+    uptimeSec: number;
+    cpuPercent: number;
+    memoryMB: number;
+    connectedClients: number;
+    lastError: { message: string; timestamp: string } | null;
+    timestamp: string;
+  }): void {
+    if (!this.io) return;
+    
+    this.io.emit('healthUpdated', health);
   }
 
   emitStatus(status: SystemStatus): void {

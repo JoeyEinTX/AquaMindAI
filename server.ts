@@ -1,17 +1,45 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { wsService } from './websocket.js';
+import os from 'os';
+import { GoogleGenAI } from '@google/genai';
+import { parseIntent, validateIntent, type ParsedIntent } from './services/intentParser.js';
+import { serverWeatherService } from './services/weatherService.server.js';
+import { advisoryEngine } from './services/advisoryEngine.js';
+import { memoryEngine } from './services/memoryEngine.js';
+import { conversationManager } from './services/conversationManager.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = 3001;
+const PORT = parseInt(process.env.PORT || '3001');
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const httpServer = createServer(app);
+const SERVER_START_TIME = Date.now();
+
+// Health monitoring
+let lastError: { message: string; timestamp: string; stack?: string } | null = null;
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// In production, serve the built frontend
+if (IS_PRODUCTION) {
+  const distPath = join(__dirname, 'dist');
+  
+  if (existsSync(distPath)) {
+    console.log('[SERVER] Serving static frontend from /dist');
+    app.use(express.static(distPath));
+  } else {
+    console.warn('[SERVER] Production mode but /dist folder not found. Run "npm run build" first.');
+  }
+}
 
 // Types
 interface ZoneState {
@@ -713,7 +741,47 @@ class Scheduler {
 // Start the scheduler
 const scheduler = new Scheduler(zoneManager);
 
+// Helper function to get system health metrics
+function getSystemHealth() {
+  const uptimeSec = Math.floor((Date.now() - SERVER_START_TIME) / 1000);
+  const memoryUsage = process.memoryUsage();
+  const memoryMB = Math.round(memoryUsage.rss / 1024 / 1024);
+  
+  // Get CPU load average (1 minute average)
+  const loadAvg = os.loadavg();
+  const cpuPercent = Math.round(loadAvg[0] * 100);
+  
+  return {
+    uptimeSec,
+    cpuPercent,
+    memoryMB,
+    connectedClients: wsService.getConnectedClients(),
+    lastError: lastError ? {
+      message: lastError.message,
+      timestamp: lastError.timestamp
+    } : null,
+    timestamp: new Date().toISOString()
+  };
+}
+
+// Start health broadcast interval (every 30 seconds)
+setInterval(() => {
+  const health = getSystemHealth();
+  wsService.emitHealthUpdated(health);
+}, 30000);
+
 // Routes
+
+// Health endpoint
+app.get('/health', (req, res) => {
+  try {
+    const health = getSystemHealth();
+    res.json(health);
+  } catch (error) {
+    console.error('[API] Error getting health:', error);
+    res.status(500).json({ success: false, message: 'Failed to get health status' });
+  }
+});
 app.post('/zones/:id/start', async (req, res) => {
   const zoneId = parseInt(req.params.id);
   const { duration } = req.body; // optional duration in seconds
@@ -948,6 +1016,193 @@ app.post('/test/rain-delay', async (req, res) => {
   }
 });
 
+// Weather forecast endpoint with server-side caching
+app.get('/weather/forecast', async (req, res) => {
+  try {
+    const zipCode = req.query.zipCode as string;
+    
+    if (!zipCode || !/^\d{5}$/.test(zipCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid 5-digit zip code required'
+      });
+    }
+
+    const forecast = await serverWeatherService.getForecast(zipCode);
+    
+    res.json({
+      success: true,
+      ...forecast
+    });
+  } catch (error) {
+    console.error('[API] Error fetching weather forecast:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to fetch weather forecast'
+    });
+  }
+});
+
+// Advisory insights endpoint
+app.get('/advisory/report', async (req, res) => {
+  try {
+    const zipCode = req.query.zipCode as string;
+    
+    if (!zipCode || !/^\d{5}$/.test(zipCode)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid 5-digit zip code required'
+      });
+    }
+
+    // Get weather forecast
+    const weatherData = await serverWeatherService.getForecast(zipCode);
+    
+    // Get recent logs
+    const recentLogs = zoneManager.getRunLogs(100); // Last 100 runs
+    
+    // Get schedules
+    const schedules = zoneManager.getSchedules();
+    
+    // Get zones
+    const zones = zoneManager['state'].zones.map(z => ({ id: z.id, name: z.name }));
+    
+    // Generate advisory report
+    const report = advisoryEngine.generateReport(
+      weatherData.forecast,
+      recentLogs,
+      schedules,
+      zones
+    );
+    
+    res.json({
+      success: true,
+      report,
+      weatherCache: {
+        cachedAt: weatherData.cachedAt,
+        expiresAt: weatherData.cacheExpiresAt
+      }
+    });
+  } catch (error) {
+    console.error('[API] Error generating advisory report:', error);
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to generate advisory report'
+    });
+  }
+});
+
+// AI Memory endpoints
+app.get('/ai/memory', (req, res) => {
+  try {
+    const memories = memoryEngine.getAllMemories();
+    const stats = memoryEngine.getStats();
+    const patterns = memoryEngine.getPatterns(0.5); // 50% confidence threshold
+    
+    res.json({
+      success: true,
+      stats,
+      memories: memories.slice(0, 50), // Return most recent 50
+      patterns,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[AI][MEMORY] Error fetching memory:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch memory data'
+    });
+  }
+});
+
+app.delete('/ai/memory', (req, res) => {
+  try {
+    const { clearType } = req.body; // 'short-term' | 'all'
+    
+    if (clearType === 'short-term') {
+      memoryEngine.clearShortTermMemory();
+      res.json({
+        success: true,
+        message: 'Short-term memory cleared',
+        timestamp: new Date().toISOString()
+      });
+    } else if (clearType === 'all') {
+      memoryEngine.clearAllMemory();
+      res.json({
+        success: true,
+        message: 'All memory cleared',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid clearType. Use "short-term" or "all"'
+      });
+    }
+  } catch (error) {
+    console.error('[AI][MEMORY] Error clearing memory:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clear memory'
+    });
+  }
+});
+
+app.post('/ai/memory/feedback', (req, res) => {
+  try {
+    const { action, followed, context } = req.body;
+    
+    if (!action || typeof followed !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'action and followed parameters are required'
+      });
+    }
+    
+    memoryEngine.recordFeedback(action, followed, context);
+    
+    res.json({
+      success: true,
+      message: 'Feedback recorded',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[AI][MEMORY] Error recording feedback:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to record feedback'
+    });
+  }
+});
+
+app.put('/ai/memory/settings', (req, res) => {
+  try {
+    const { enabled } = req.body;
+    
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'enabled parameter must be a boolean'
+      });
+    }
+    
+    memoryEngine.setEnabled(enabled);
+    
+    res.json({
+      success: true,
+      message: `Learning ${enabled ? 'enabled' : 'disabled'}`,
+      enabled,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[AI][MEMORY] Error updating settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update settings'
+    });
+  }
+});
+
 // Test route for schedule functionality
 app.post('/test/schedules', (req, res) => {
   console.log('\n=== TESTING SCHEDULE FUNCTIONALITY ===');
@@ -996,9 +1251,448 @@ app.post('/test/schedules', (req, res) => {
   });
 });
 
+// AI Assistant Chat endpoint with intent parsing and action execution
+app.post('/ai/chat', async (req, res) => {
+  try {
+    const { prompt, confirmAction } = req.body;
+
+    // Validate input
+    if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Prompt is required and must be a non-empty string' 
+      });
+    }
+
+    // Sanitize input - remove HTML tags and limit length
+    const sanitizedPrompt = prompt
+      .replace(/<[^>]*>/g, '') // Remove HTML tags
+      .trim()
+      .slice(0, 2000); // Limit to 2000 characters
+
+    console.log('[AI] Processing chat request:', sanitizedPrompt.slice(0, 100));
+
+    // Parse intent from user message
+    const parsedIntent = parseIntent(sanitizedPrompt);
+    console.log('[AI] Parsed intent:', parsedIntent.intent, 'Confidence:', parsedIntent.confidence);
+
+    // If confirmation was provided, execute the pending action
+    if (confirmAction && confirmAction.intent) {
+      return await executeAction(confirmAction, res);
+    }
+
+    // If intent is actionable and detected with high confidence
+    if (parsedIntent.intent !== 'unknown' && parsedIntent.confidence > 0.5) {
+      // Validate the intent
+      const validation = validateIntent(parsedIntent);
+      if (!validation.valid) {
+        return res.json({
+          success: true,
+          response: `I understood that you want to ${parsedIntent.intent}, but there's an issue: ${validation.error}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Check if confirmation is required
+      if (parsedIntent.requiresConfirmation) {
+        return res.json({
+          success: true,
+          response: parsedIntent.confirmationMessage || 'Please confirm this action.',
+          intent: parsedIntent.intent,
+          parameters: parsedIntent.parameters,
+          requiresConfirmation: true,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Execute action without confirmation for simple operations
+      return await executeAction(parsedIntent, res);
+    }
+
+    // No actionable intent detected - use AI for conversational response
+    // Check for API key
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey || apiKey === 'your_google_api_key_here' || apiKey === 'your_gemini_api_key_here') {
+      return res.status(503).json({ 
+        success: false, 
+        message: 'AI service not configured. Please set GOOGLE_API_KEY in .env file.' 
+      });
+    }
+
+    // Gather grounding context from live system data
+    const status = await zoneManager.getStatus();
+    const recentLogs = zoneManager.getRecentRuns(10);
+    const health = getSystemHealth();
+    const schedules = zoneManager.getSchedules();
+
+    // Get weather and advisory data if zip code is available
+    let weatherContext = '';
+    let advisoryContext = '';
+    
+    const zipCode = process.env.DEFAULT_ZIP_CODE || req.body.zipCode;
+    if (zipCode && /^\d{5}$/.test(zipCode)) {
+      try {
+        const weatherData = await serverWeatherService.getForecast(zipCode);
+        const zones = zoneManager['state'].zones.map(z => ({ id: z.id, name: z.name }));
+        const allLogs = zoneManager.getRunLogs(100);
+        const advisoryReport = advisoryEngine.generateReport(
+          weatherData.forecast,
+          allLogs,
+          schedules,
+          zones
+        );
+        
+        // Build weather context
+        const next3Days = weatherData.forecast.slice(0, 3);
+        weatherContext = `\n**Weather Forecast (Next 3 Days):**
+${next3Days.map(day => 
+  `- ${day.date}: ${day.tempHigh}°F, ${day.precipProbability}% rain chance (${day.precipAmount}" expected), ${day.weatherDescription}`
+).join('\n')}
+`;
+
+        // Build advisory context
+        const topInsights = advisoryReport.insights.slice(0, 3);
+        advisoryContext = `\n**AI Advisory Insights:**
+Summary: ${advisoryReport.summary}
+${topInsights.length > 0 ? '\nTop Recommendations:' : ''}
+${topInsights.map(insight => `- ${insight.icon} ${insight.message}`).join('\n')}
+`;
+      } catch (error) {
+        console.log('[AI] Weather/advisory data unavailable:', error instanceof Error ? error.message : 'Unknown error');
+      }
+    }
+
+    // Get memory and learning context
+    let memoryContext = '';
+    let patternsContext = '';
+    
+    if (memoryEngine.isEnabled()) {
+      const relevantMemories = memoryEngine.getRelevantMemories(10);
+      const learnedPatterns = memoryEngine.getPatterns(0.6); // 60% confidence
+      
+      if (relevantMemories.length > 0) {
+        memoryContext = `\n${memoryEngine.formatMemoriesForContext(relevantMemories)}\n`;
+      }
+      
+      if (learnedPatterns.length > 0) {
+        patternsContext = `\n${memoryEngine.formatPatternsForContext(learnedPatterns)}\n`;
+      }
+    }
+
+    // Build context string
+    const contextString = `
+**Current System Status:**
+- Active Zone: ${status.activeZoneId ? `Zone ${status.activeZoneId}` : 'None'}
+- Time Remaining: ${status.timeRemaining} seconds
+- Rain Delay: ${status.rainDelay.isActive ? `Active (${status.rainDelay.hoursRemaining}h remaining)` : 'Not active'}
+
+**Recent Watering History (Last 10 runs):**
+${recentLogs.length > 0 ? recentLogs.map(log => 
+  `- ${log.zoneName}: ${log.durationSec}s (${log.source}, ${log.success ? 'successful' : 'failed'}) at ${new Date(log.startedAt).toLocaleString()}`
+).join('\n') : '- No recent watering history'}
+
+**System Health:**
+- Uptime: ${Math.floor(health.uptimeSec / 3600)}h ${Math.floor((health.uptimeSec % 3600) / 60)}m
+- Memory Usage: ${health.memoryMB} MB
+- CPU: ${health.cpuPercent}%
+- Connected Clients: ${health.connectedClients}
+
+**Schedules (${schedules.length} total):**
+${schedules.length > 0 ? schedules.slice(0, 5).map(s => 
+  `- Zone ${s.zoneId} at ${s.startTime} on days ${s.daysOfWeek.join(',')} for ${s.durationSec}s (${s.enabled ? 'enabled' : 'disabled'})`
+).join('\n') : '- No schedules configured'}
+${schedules.length > 5 ? `\n(${schedules.length - 5} more schedules not shown)` : ''}${weatherContext}${advisoryContext}${memoryContext}${patternsContext}
+`;
+
+    // Create AI prompt with context
+    const fullPrompt = `You are AquaMind AI Assistant, a helpful assistant for an intelligent irrigation system. You help users understand and manage their sprinkler system.
+
+${contextString}
+
+User Question: ${sanitizedPrompt}
+
+Provide a helpful, concise response based on the current system status and context above. Be friendly and conversational. If the user asks about something not in the context, politely explain you don't have that information but offer to help with what you do know.`;
+
+    // Call Gemini API
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      config: {
+        temperature: 0.7,
+        maxOutputTokens: 500,
+      }
+    });
+
+    const aiResponse = response.text?.trim();
+    
+    if (!aiResponse) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'AI service returned an empty response' 
+      });
+    }
+
+    // Sanitize output - remove potential HTML/script tags
+    const sanitizedResponse = aiResponse
+      .replace(/<script[^>]*>.*?<\/script>/gi, '')
+      .replace(/<[^>]*>/g, '')
+      .trim();
+
+    console.log('[AI] Response generated successfully');
+
+    res.json({
+      success: true,
+      response: sanitizedResponse,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[AI] Error processing chat:', error);
+    
+    // Handle specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('API key')) {
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid API key' 
+        });
+      }
+      if (error.message.includes('quota')) {
+        return res.status(429).json({ 
+          success: false, 
+          message: 'API quota exceeded. Please try again later.' 
+        });
+      }
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to process your request. Please try again.' 
+    });
+  }
+});
+
+// Helper function to execute actions based on parsed intent
+async function executeAction(intent: ParsedIntent, res: express.Response): Promise<void> {
+  try {
+    let result: any;
+    let actionMessage = '';
+    const logEntry = {
+      source: 'AI' as 'manual' | 'schedule',
+      timestamp: new Date().toISOString()
+    };
+
+    switch (intent.intent) {
+      case 'startZone':
+        result = await zoneManager.startZone(
+          intent.parameters.zoneId,
+          intent.parameters.durationSec,
+          'manual'
+        );
+        
+        if (result.success) {
+          const minutes = Math.floor(intent.parameters.durationSec / 60);
+          actionMessage = `✓ Started Zone ${intent.parameters.zoneId} for ${minutes} minute${minutes !== 1 ? 's' : ''}`;
+          
+          // Enhanced logging for AI-triggered actions
+          console.log(`[AI][ACTION] Zone ${intent.parameters.zoneId} started via AI command`);
+        } else {
+          actionMessage = `✗ Failed to start zone: ${result.message}`;
+        }
+        break;
+
+      case 'stopZone':
+        if (intent.parameters.zoneId === 'all') {
+          // Stop all active zones
+          const status = await zoneManager.getStatus();
+          if (status.activeZoneId) {
+            result = await zoneManager.stopZone(status.activeZoneId);
+            actionMessage = result.success ? 
+              `✓ Stopped all zones` : 
+              `✗ Failed to stop zones: ${result.message}`;
+            console.log(`[AI][ACTION] All zones stopped via AI command`);
+          } else {
+            actionMessage = 'No zones are currently running';
+          }
+        } else {
+          result = await zoneManager.stopZone(intent.parameters.zoneId);
+          actionMessage = result.success ? 
+            `✓ Stopped Zone ${intent.parameters.zoneId}` : 
+            `✗ Failed to stop zone: ${result.message}`;
+          console.log(`[AI][ACTION] Zone ${intent.parameters.zoneId} stopped via AI command`);
+        }
+        break;
+
+      case 'setRainDelay':
+        const hours = intent.parameters.hours;
+        const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+        zoneManager.setRainDelay(true, expiresAt, hours);
+        actionMessage = `✓ Rain delay set for ${hours} hour${hours !== 1 ? 's' : ''}`;
+        console.log(`[AI][ACTION] Rain delay set for ${hours} hours via AI command`);
+        break;
+
+      case 'clearRainDelay':
+        zoneManager.setRainDelay(false);
+        actionMessage = `✓ Rain delay cleared`;
+        console.log(`[AI][ACTION] Rain delay cleared via AI command`);
+        break;
+
+      case 'createSchedule':
+        const schedule = zoneManager.createSchedule({
+          zoneId: intent.parameters.zoneId,
+          startTime: intent.parameters.startTime,
+          daysOfWeek: intent.parameters.daysOfWeek,
+          durationSec: intent.parameters.durationSec
+        });
+        
+        const days = intent.parameters.daysOfWeek.map((d: number) => 
+          ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]
+        ).join(', ');
+        const minutes = Math.floor(intent.parameters.durationSec / 60);
+        actionMessage = `✓ Created schedule for Zone ${intent.parameters.zoneId} at ${intent.parameters.startTime} on ${days} for ${minutes} minutes`;
+        console.log(`[AI][ACTION] Schedule created via AI command:`, schedule.id);
+        break;
+
+      case 'getStatus':
+        const status = await zoneManager.getStatus();
+        if (status.activeZoneId) {
+          const minutes = Math.floor(status.timeRemaining / 60);
+          const seconds = status.timeRemaining % 60;
+          actionMessage = `Zone ${status.activeZoneId} is currently running with ${minutes}m ${seconds}s remaining.`;
+        } else {
+          actionMessage = 'No zones are currently running.';
+        }
+        
+        if (status.rainDelay.isActive) {
+          actionMessage += ` Rain delay is active for ${status.rainDelay.hoursRemaining} more hour${status.rainDelay.hoursRemaining !== 1 ? 's' : ''}.`;
+        }
+        break;
+
+      default:
+        actionMessage = 'Unknown action';
+    }
+
+    res.json({
+      success: true,
+      response: actionMessage,
+      actionExecuted: true,
+      intent: intent.intent,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('[AI][ACTION] Error executing action:', error);
+    res.json({
+      success: true,
+      response: `Failed to execute action: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      actionExecuted: false,
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+// Store the actual port being used
+let ACTUAL_PORT = PORT;
+
+// Helper function to get network interface IPs
+function getNetworkIPs(): string[] {
+  const interfaces = os.networkInterfaces();
+  const ips: string[] = ['localhost'];
+  
+  for (const name of Object.keys(interfaces)) {
+    const iface = interfaces[name];
+    if (!iface) continue;
+    
+    for (const alias of iface) {
+      if (alias.family === 'IPv4' && !alias.internal) {
+        ips.push(alias.address);
+      }
+    }
+  }
+  
+  return ips;
+}
+
+// Config endpoint - returns dynamic backend configuration
+app.get('/config', (req, res) => {
+  const networkIPs = getNetworkIPs();
+  const hostname = req.hostname || 'localhost';
+  
+  res.json({
+    apiBaseUrl: `http://${hostname}:${ACTUAL_PORT}`,
+    wsBaseUrl: `ws://${hostname}:${ACTUAL_PORT}`,
+    learningEnabled: memoryEngine.isEnabled(),
+    port: ACTUAL_PORT,
+    networkIPs: networkIPs.map(ip => ({
+      apiBaseUrl: `http://${ip}:${ACTUAL_PORT}`,
+      wsBaseUrl: `ws://${ip}:${ACTUAL_PORT}`
+    })),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Catch-all route for SPA in production (must be after all API routes)
+if (IS_PRODUCTION) {
+  app.get('*', (req, res) => {
+    const indexPath = join(__dirname, 'dist', 'index.html');
+    if (existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('Frontend not built. Run "npm run build" first.');
+    }
+  });
+}
+
+// Error capture middleware (must be after routes)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const errorInfo = {
+    message: err.message || 'Unknown error',
+    timestamp: new Date().toISOString(),
+    stack: err.stack
+  };
+  
+  lastError = errorInfo;
+  console.error('[ERROR]', errorInfo);
+  
+  res.status(500).json({
+    success: false,
+    message: errorInfo.message
+  });
+});
+
 // Initialize WebSocket service
 wsService.initialize(httpServer);
 
-httpServer.listen(PORT, () => {
-  console.log(`AquaMind Backend server running on port ${PORT}`);
-});
+// Auto-port detection with EADDRINUSE handling
+function startServer(port: number, maxRetries: number = 5): void {
+  httpServer.listen(port)
+    .on('listening', () => {
+      ACTUAL_PORT = port; // Store the actual port being used
+      console.log(`[SERVER] AquaMind Backend server running on port ${port}`);
+      console.log(`[WS] WebSocket server initialized (sharing port ${port})`);
+      console.log(`[API] REST API available at http://localhost:${port}`);
+      console.log(`[CONFIG] Dynamic config endpoint: GET http://localhost:${port}/config`);
+      console.log(`[AI] AI Chat endpoint: POST http://localhost:${port}/ai/chat`);
+    })
+    .on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        const nextPort = port + 1;
+        const retriesLeft = maxRetries - 1;
+        
+        if (retriesLeft > 0) {
+          console.log(`[SERVER] Port ${port} is in use, trying port ${nextPort}...`);
+          startServer(nextPort, retriesLeft);
+        } else {
+          console.error(`[SERVER] Failed to find available port after ${maxRetries} attempts`);
+          process.exit(1);
+        }
+      } else {
+        console.error(`[SERVER] Server error:`, err);
+        process.exit(1);
+      }
+    });
+}
+
+// Start server with auto-port detection
+startServer(PORT);

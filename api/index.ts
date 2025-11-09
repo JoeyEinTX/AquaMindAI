@@ -20,6 +20,7 @@ export * as zonesService from './services/zonesService';
 export * as schedulesService from './services/schedulesService';
 export * as rainDelayService from './services/rainDelayService';
 export * as logsService from './services/logsService';
+export * as healthService from './services/healthService';
 
 // Export all hooks
 export { useSystemStatus } from './hooks/useSystemStatus';
@@ -27,3 +28,6 @@ export { useZoneControl } from './hooks/useZoneControl';
 export { useSchedules } from './hooks/useSchedules';
 export { useRainDelay } from './hooks/useRainDelay';
 export { useRunLogs } from './hooks/useRunLogs';
+export { useSystemHealth } from './hooks/useSystemHealth';
+export { useConnectionStatus } from './hooks/useConnectionStatus';
+export type { ConnectionStatus, ConnectionState } from './hooks/useConnectionStatus';

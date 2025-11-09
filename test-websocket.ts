@@ -7,7 +7,7 @@
 
 import { io, Socket } from 'socket.io-client';
 
-const WS_PORT = process.env.WS_PORT || '3002';
+const WS_PORT = process.env.WS_PORT || '3003';
 const WS_URL = `http://localhost:${WS_PORT}`;
 
 console.log(`\n${'='.repeat(60)}`);
