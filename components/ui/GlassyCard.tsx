@@ -1,4 +1,5 @@
 import React, { ReactNode } from 'react';
+import { RippleContainer } from './RippleEffect';
 
 export interface GlassyCardProps {
   title?: string;
@@ -20,13 +21,14 @@ export const GlassyCard: React.FC<GlassyCardProps> = ({
   const accentColor = accent || 'var(--accent-color)';
   
   return (
-    <div
+    <RippleContainer
+      onClick={onClick}
+      disabled={!onClick}
       className={`glass-card rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-2xl transition-all duration-300 hover:scale-[1.02] border border-white/20 backdrop-blur-xl relative overflow-hidden ${
         onClick ? 'cursor-pointer' : ''
       } ${className}`}
-      style={{ background: 'var(--glass-bg)' }}
-      onClick={onClick}
     >
+      <div style={{ background: 'var(--glass-bg)' }} className="absolute inset-0 -z-10 rounded-2xl" />
       {/* Subtle top-left light reflection */}
       <div
         className="absolute -top-20 -left-20 w-40 h-40 rounded-full opacity-20 pointer-events-none blur-3xl"
@@ -80,7 +82,7 @@ export const GlassyCard: React.FC<GlassyCardProps> = ({
           }}
         />
       </div>
-    </div>
+    </RippleContainer>
   );
 };
 

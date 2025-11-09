@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { ThemeState } from '../theme/themeEngine';
 import { getSeason, useLightEngine } from '../theme/lightEngine';
+import { useParallaxMotion } from '../hooks/useParallaxMotion';
 
 interface AmbientBackgroundProps {
   themeState: ThemeState;
@@ -12,11 +13,24 @@ export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ themeState
   
   // Apply dynamic lighting
   const lightState = useLightEngine(theme, dayPeriod);
+  
+  // Apply parallax motion
+  const parallax = useParallaxMotion({ 
+    intensity: 0.5, 
+    maxOffset: 8,
+    enableGyro: true,
+    enableCursor: true 
+  });
 
   return (
     <div
       className="fixed inset-0 -z-10 pointer-events-none overflow-hidden"
-      style={{ background: backgroundGradient }}
+      style={{ 
+        background: backgroundGradient,
+        transform: `translate(${parallax.x}px, ${parallax.y}px)`,
+        transition: 'transform 0.1s ease-out',
+        willChange: 'transform'
+      }}
     >
       {/* Dynamic directional light overlay */}
       <div 

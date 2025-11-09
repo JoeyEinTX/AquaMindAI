@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User } from '../types';
 import { SettingsIcon } from './icons/SettingsIcon';
 import { UsersIcon } from './icons/UsersIcon';
@@ -6,6 +6,7 @@ import { WifiIcon } from './icons/WifiIcon';
 import { ServerIcon } from './icons/ServerIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PlusIcon } from './icons/PlusIcon';
+import { SparklesIcon } from './icons/SparklesIcon';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -19,7 +20,7 @@ interface SettingsModalProps {
 
 const SettingsModal: React.FC<SettingsModalProps> = (props) => {
     const { isOpen, onClose, users, currentUser, onCreateUser, onDeleteUser, addNotification } = props;
-    const [activeTab, setActiveTab] = useState<'users' | 'network' | 'system'>('users');
+    const [activeTab, setActiveTab] = useState<'users' | 'interaction' | 'network' | 'system'>('users');
     
     // State for the "Add User" form
     const [isAddingUser, setIsAddingUser] = useState(false);
@@ -27,6 +28,50 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
     const [newPin, setNewPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
     const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+    
+    // State for interaction settings
+    const [rippleIntensity, setRippleIntensity] = useState<'off' | 'subtle' | 'normal'>('normal');
+    const [motionEffects, setMotionEffects] = useState(true);
+    const [hapticsEnabled, setHapticsEnabled] = useState(true);
+    
+    // Load interaction settings from localStorage
+    useEffect(() => {
+        const savedRipple = localStorage.getItem('rippleIntensity') as 'off' | 'subtle' | 'normal';
+        if (savedRipple) setRippleIntensity(savedRipple);
+        
+        const savedMotion = localStorage.getItem('motionEffects');
+        if (savedMotion !== null) setMotionEffects(savedMotion === 'true');
+        
+        const savedHaptics = localStorage.getItem('hapticsEnabled');
+        if (savedHaptics !== null) setHapticsEnabled(savedHaptics === 'true');
+    }, []);
+    
+    const handleRippleChange = (value: 'off' | 'subtle' | 'normal') => {
+        setRippleIntensity(value);
+        localStorage.setItem('rippleIntensity', value);
+        console.log('[RIPPLE] Intensity changed to', value);
+        addNotification(`Ripple effects ${value === 'off' ? 'disabled' : `set to ${value}`}`, 'success');
+        // Trigger storage event for other components
+        window.dispatchEvent(new Event('storage'));
+    };
+    
+    const handleMotionToggle = () => {
+        const newValue = !motionEffects;
+        setMotionEffects(newValue);
+        localStorage.setItem('motionEffects', String(newValue));
+        console.log('[MOTION] Effects toggled to', newValue);
+        addNotification(`Motion effects ${newValue ? 'enabled' : 'disabled'}`, 'success');
+        // Trigger storage event for other components
+        window.dispatchEvent(new Event('storage'));
+    };
+    
+    const handleHapticsToggle = () => {
+        const newValue = !hapticsEnabled;
+        setHapticsEnabled(newValue);
+        localStorage.setItem('hapticsEnabled', String(newValue));
+        console.log('[HAPTICS] Toggled to', newValue);
+        addNotification(`Haptic feedback ${newValue ? 'enabled' : 'disabled'}`, 'success');
+    };
 
     if (!isOpen) return null;
 
@@ -135,6 +180,81 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
         </div>
     );
 
+    const renderInteractionTab = () => (
+        <div className="space-y-6">
+            <h4 className="font-bold text-lg text-white">Interaction Effects</h4>
+            
+            {/* Ripple Intensity */}
+            <div className="p-4 bg-slate-700/50 rounded-lg space-y-3">
+                <label className="block text-sm font-medium text-white">
+                    Ripple Intensity
+                </label>
+                <p className="text-xs text-slate-400 mb-2">
+                    Visual feedback when clicking interactive elements
+                </p>
+                <select 
+                    value={rippleIntensity}
+                    onChange={(e) => handleRippleChange(e.target.value as 'off' | 'subtle' | 'normal')}
+                    className="w-full bg-gray-700 border-gray-600 text-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                >
+                    <option value="off">Off</option>
+                    <option value="subtle">Subtle</option>
+                    <option value="normal">Normal</option>
+                </select>
+            </div>
+            
+            {/* Motion Depth (Parallax) */}
+            <div className="p-4 bg-slate-700/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <label className="block text-sm font-medium text-white">
+                            Motion Depth (Parallax)
+                        </label>
+                        <p className="text-xs text-slate-400 mt-1">
+                            Background responds to cursor/device tilt
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox"
+                            checked={motionEffects}
+                            onChange={handleMotionToggle}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+            
+            {/* Haptic Feedback */}
+            <div className="p-4 bg-slate-700/50 rounded-lg">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <label className="block text-sm font-medium text-white">
+                            Haptic Feedback
+                        </label>
+                        <p className="text-xs text-slate-400 mt-1">
+                            Vibration on touch interactions (mobile)
+                        </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                            type="checkbox"
+                            checked={hapticsEnabled}
+                            onChange={handleHapticsToggle}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+            </div>
+            
+            <p className="text-xs text-slate-400 italic">
+                💡 These effects enhance interactivity. Disable for better performance or accessibility.
+            </p>
+        </div>
+    );
+
     const renderSystemTab = () => (
          <div className="space-y-4">
             <h4 className="font-bold text-lg text-white">System Actions</h4>
@@ -167,6 +287,7 @@ const SettingsModal: React.FC<SettingsModalProps> = (props) => {
     
     const tabs = [
         { id: 'users', label: 'Users', icon: UsersIcon, content: renderUsersTab() },
+        { id: 'interaction', label: 'Interaction', icon: SparklesIcon, content: renderInteractionTab() },
         { id: 'network', label: 'Network', icon: WifiIcon, content: renderNetworkTab() },
         { id: 'system', label: 'System', icon: ServerIcon, content: renderSystemTab() },
     ] as const;
