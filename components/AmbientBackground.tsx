@@ -1,18 +1,62 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ThemeState } from '../theme/themeEngine';
+import { getSeason, useLightEngine } from '../theme/lightEngine';
 
 interface AmbientBackgroundProps {
   themeState: ThemeState;
 }
 
 export const AmbientBackground: React.FC<AmbientBackgroundProps> = ({ themeState }) => {
-  const { theme, backgroundGradient } = themeState;
+  const { theme, dayPeriod, backgroundGradient } = themeState;
+  const season = getSeason();
+  
+  // Apply dynamic lighting
+  const lightState = useLightEngine(theme, dayPeriod);
 
   return (
     <div
       className="fixed inset-0 -z-10 pointer-events-none overflow-hidden"
       style={{ background: backgroundGradient }}
     >
+      {/* Dynamic directional light overlay */}
+      <div 
+        className="absolute inset-0 opacity-30 transition-all duration-1000"
+        style={{
+          background: `linear-gradient(${lightState.ambientDirection}deg, ${lightState.ambientGlow} 0%, transparent 60%)`,
+        }}
+      />
+
+      {/* Seasonal particles layer */}
+      {season === 'spring' && theme !== 'night' && (
+        <div className="absolute inset-0 animate-particle-drift">
+          <div className="petal-particle" style={{ left: '20%', animationDelay: '0s' }} />
+          <div className="petal-particle" style={{ left: '50%', animationDelay: '3s' }} />
+          <div className="petal-particle" style={{ left: '75%', animationDelay: '6s' }} />
+        </div>
+      )}
+
+      {season === 'summer' && theme === 'clear' && dayPeriod === 'midday' && (
+        <div className="absolute inset-0 animate-heat-shimmer opacity-20" />
+      )}
+
+      {season === 'autumn' && theme !== 'night' && (
+        <div className="absolute inset-0 animate-particle-drift">
+          <div className="leaf-particle" style={{ left: '15%', animationDelay: '0s' }} />
+          <div className="leaf-particle" style={{ left: '45%', animationDelay: '4s' }} />
+          <div className="leaf-particle" style={{ left: '70%', animationDelay: '8s' }} />
+          <div className="leaf-particle" style={{ left: '85%', animationDelay: '12s' }} />
+        </div>
+      )}
+
+      {season === 'winter' && (theme === 'snow' || theme === 'night') && (
+        <div className="absolute inset-0 animate-particle-drift">
+          <div className="snow-particle-dense" style={{ left: '10%', animationDelay: '0s' }} />
+          <div className="snow-particle-dense" style={{ left: '30%', animationDelay: '2s' }} />
+          <div className="snow-particle-dense" style={{ left: '55%', animationDelay: '4s' }} />
+          <div className="snow-particle-dense" style={{ left: '75%', animationDelay: '6s' }} />
+          <div className="snow-particle-dense" style={{ left: '90%', animationDelay: '8s' }} />
+        </div>
+      )}
       {/* Weather-specific overlays */}
       {theme === 'clear' && (
         <div className="absolute inset-0 animate-gradient-shift">
