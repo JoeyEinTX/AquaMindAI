@@ -4,8 +4,17 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "set:localhost": "tsx scripts/toggleEnv.ts localhost",
+    "set:lan": "tsx scripts/toggleEnv.ts lan",
+    "set:auto": "tsx scripts/toggleEnv.ts auto",
+    "predev": "tsx scripts/killPorts.ts",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "vite",
+    "dev:backend": "tsx server.ts",
     "build": "vite build",
+    "build:check": "tsc --noEmit && vite build",
+    "prestart": "tsx scripts/killPorts.ts",
+    "start": "cross-env NODE_ENV=production tsx server.ts",
     "preview": "vite preview",
     "server": "tsx server.ts",
     "test": "tsx test.ts"
@@ -21,8 +30,13 @@
     "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
+    "tsx": "^4.7.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }
